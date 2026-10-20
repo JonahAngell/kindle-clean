@@ -21,9 +21,21 @@ Guide: https://kindlemodding.org/jailbreaking/SpringBreak/
 
 Both install a hotfix and KUAL/KPM. Keep the hotfix installed so the jailbreak survives OTA updates. Keep Airplane Mode on until the guide says the hotfix is installed.
 
-## 2. Install KOReader
+**Used on this device (2026-10-20): SpiderCat** (https://kindlemodding.org/jailbreaking/SpiderCat/). `documents/JAILBROKEN.txt` confirms it (jb.sh v2.2.1). It installs KPM and blocks OTA updates.
 
-Follow the "What's Next" → KOReader page on kindlemodding.org. On firmware 5.16.3 and newer, pick the **kindlehf** (hard-float) build.
+### Cleanup after SpiderCat
+1. Delete any `update*.bin` or `update.bin.tmp.partial` files from the root of the Kindle drive. None were present on 2026-10-20.
+2. Delete the `fill_disk/` filler folder (about 12 GB). In Finder, also empty the Trash while the Kindle is still mounted, or the space isn't freed.
+
+## 2. Install KOReader (on the device, through KPM)
+
+Reboot, turn on Wi-Fi, then type each line below into the home-screen search bar:
+
+    ;kpm update
+    ;kpm install koreader
+    ;kpm launch koreader
+
+Source: https://kindlemodding.org/jailbreaking/whats-next/getting-koreader/
 
 ## 3. Install the plugin
 
