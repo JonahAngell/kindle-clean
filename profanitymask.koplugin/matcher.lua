@@ -22,6 +22,9 @@ local UNICODE_PUNCT = {
     ["…"] = true, ["„"] = true, ["‚"] = true, ["‹"] = true, ["›"] = true,
 }
 
+--- Category of entries that appear before any [Name] header.
+Matcher.DEFAULT_CATEGORY = "General"
+
 local APOSTROPHES = { ["'"] = true, ["’"] = true }
 -- Separators that may join words inside one rendered token ("damn-it").
 local INNER_SEPARATORS = { ["-"] = true, ["—"] = true, ["–"] = true, ["/"] = true }
@@ -53,19 +56,20 @@ Format (one entry per line):
     word                -- single word
     son of a            -- phrase (any line containing spaces)
     [Strong]            -- category header; applies to following entries
+                        -- (entries before any header are in "General")
     # comment           -- ignored, as are blank lines
     re:...              -- reserved for a future regex mode (currently skipped)
 --]]
 function Matcher.parseEntries(text, lower)
     lower = lower or string.lower
     local entries = {}
-    local category
+    local category = Matcher.DEFAULT_CATEGORY
     for line in (text .. "\n"):gmatch("(.-)\r?\n") do
         line = line:gsub("^%s+", ""):gsub("%s+$", "")
         if line == "" or line:sub(1, 1) == "#" then -- luacheck: ignore 542
             -- skip
         elseif line:match("^%[.+%]$") then
-            category = line:sub(2, -2)
+            category = line:sub(2, -2):gsub("^%s+", ""):gsub("%s+$", "")
         elseif line:sub(1, 3) == "re:" then
             entries[#entries + 1] = { kind = "regex", pattern = line:sub(4), category = category }
         else
@@ -83,6 +87,18 @@ function Matcher.parseEntries(text, lower)
     return entries
 end
 
+--- Category names used by `entries`, in file order (General first if used).
+function Matcher.categories(entries)
+    local list, seen = {}, {}
+    for _, e in ipairs(entries) do
+        if e.category and not seen[e.category] then
+            seen[e.category] = true
+            list[#list + 1] = e.category
+        end
+    end
+    return list
+end
+
 --[[--
 Create a matcher.
 
@@ -90,6 +106,7 @@ Create a matcher.
   entries: array from parseEntries()
   plurals: boolean, also match simple plural forms (words/boxes/parties)
   lower:   UTF-8 aware lowercase function (defaults to string.lower)
+  disabled_categories: optional set {name = true} of categories to ignore
 --]]
 function Matcher.new(opts)
     local self = setmetatable({}, Matcher)
@@ -100,8 +117,11 @@ function Matcher.new(opts)
     self.needles = {}     -- substrings for the fast page pre-check
     self.max_phrase_len = 1
     local seen_needle = {}
+    local disabled = opts.disabled_categories or {}
     for _, e in ipairs(opts.entries or {}) do
-        if e.kind == "word" then
+        if disabled[e.category] then -- luacheck: ignore 542
+            -- skip
+        elseif e.kind == "word" then
             self.words[e.text] = true
         elseif e.kind == "phrase" then
             self.phrases[#self.phrases + 1] = e
@@ -109,7 +129,7 @@ function Matcher.new(opts)
                 self.max_phrase_len = #e.words
             end
         end
-        if e.words and e.words[1] then
+        if e.words and e.words[1] and not disabled[e.category] then
             local needle = e.words[1]
             -- for plurals like "parties" from "party", search the stem
             if self.plurals and needle:sub(-1) == "y" and #needle > 2 then
@@ -253,6 +273,42 @@ function Matcher:matchPhraseEnding(window)
         end
     end
     return best
+end
+
+--[[--
+Match a whole sequence of tokens (e.g. the words of a PDF page, in reading order).
+
+@tparam table tokens array of raw token strings
+@treturn table array of hits. A word hit is
+  { first = i, last = i, s = start_char, e = end_char, n = token_chars };
+  a phrase hit covers whole tokens: { first = i, last = j }.
+--]]
+function Matcher:matchSequence(tokens)
+    local hits = {}
+    local window, idx = {}, {}
+    local max_window = self.max_phrase_len
+    for i, token in ipairs(tokens) do
+        local spans, norm = self:matchToken(token)
+        if spans then
+            local n = #Matcher.splitChars(token)
+            for _, sp in ipairs(spans) do
+                hits[#hits + 1] = { first = i, last = i, s = sp[1], e = sp[2], n = n }
+            end
+        end
+        if max_window > 1 and norm ~= "" then
+            window[#window + 1] = norm
+            idx[#idx + 1] = i
+            if #window > max_window then
+                table.remove(window, 1)
+                table.remove(idx, 1)
+            end
+            local len = self:matchPhraseEnding(window)
+            if len then
+                hits[#hits + 1] = { first = idx[#idx - len + 1], last = i }
+            end
+        end
+    end
+    return hits
 end
 
 return Matcher

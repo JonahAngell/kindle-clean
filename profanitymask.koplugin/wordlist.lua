@@ -18,9 +18,11 @@ WordList.DEFAULT_CONTENT = [[
 # punctuation; possessives (word's) are always masked, plurals optionally.
 # Lines starting with # are comments.
 #
-# Optional category headers group the entries that follow them
-# (categories are reserved for future profiles and are not used yet):
-# [Mild]
+# Optional category headers group the entries that follow them, e.g.
+#   [Strong]
+# Categories can be switched on and off per profile from the menu
+# (Profanity filter > Categories). Entries above the first header are in
+# the "General" category.
 
 damn
 hell
@@ -40,6 +42,9 @@ function WordList.read(path)
 end
 
 local function writeAtomic(path, content)
+    if content ~= "" and content:sub(-1) ~= "\n" then
+        content = content .. "\n"
+    end
     local tmp = path .. ".tmp"
     local f, err = io.open(tmp, "wb")
     if not f then return false, err end
@@ -51,6 +56,11 @@ local function writeAtomic(path, content)
         return false, rename_err
     end
     return true
+end
+
+--- Replace the whole file (used by the in-app editor).
+function WordList.write(path, content)
+    return writeAtomic(path, content)
 end
 
 --- Read the list, creating it with default content if missing.
@@ -92,8 +102,23 @@ function WordList.contains(content, word, lower)
     return false
 end
 
+local function isHeaderLine(line)
+    return line:gsub("^%s+", ""):gsub("%s+$", ""):match("^%[.+%]$") ~= nil
+end
+
+local function splitLines(content)
+    local lines = {}
+    for line in (content .. "\n"):gmatch("(.-)\r?\n") do
+        lines[#lines + 1] = line
+    end
+    -- The split yields a trailing empty element for the final newline.
+    if lines[#lines] == "" then lines[#lines] = nil end
+    return lines
+end
+
 --[[--
-Append a word or phrase.
+Add a word or phrase to the General section (before the first [Category]
+header, or at the end if there are no headers).
 @treturn bool added (false if empty or already present)
 @treturn string|nil error message
 --]]
@@ -103,10 +128,18 @@ function WordList.add(path, word, lower)
     if word == "" then return false end
     local content = WordList.ensure(path)
     if WordList.contains(content, word, lower) then return false end
-    if content ~= "" and content:sub(-1) ~= "\n" then
-        content = content .. "\n"
+    local lines = splitLines(content)
+    local at = #lines + 1
+    for i, line in ipairs(lines) do
+        if isHeaderLine(line) then
+            at = i
+            -- keep the blank line(s) separating the section from the header
+            while at > 1 and lines[at - 1]:match("^%s*$") do at = at - 1 end
+            break
+        end
     end
-    local ok, err = writeAtomic(path, content .. word .. "\n")
+    table.insert(lines, at, word)
+    local ok, err = writeAtomic(path, table.concat(lines, "\n") .. "\n")
     return ok, err
 end
 
@@ -121,7 +154,7 @@ function WordList.remove(path, word, lower)
     if not content then return false end
     local target = normalize(word, lower)
     local out, removed = {}, false
-    for line in (content .. "\n"):gmatch("(.-)\r?\n") do
+    for _, line in ipairs(splitLines(content)) do
         if isEntryLine(line) and normalize(line, lower) == target then
             removed = true
         else
@@ -129,8 +162,6 @@ function WordList.remove(path, word, lower)
         end
     end
     if not removed then return false end
-    -- The split above yields a trailing empty element for the final newline.
-    if out[#out] == "" then out[#out] = nil end
     local ok, err = writeAtomic(path, table.concat(out, "\n") .. "\n")
     return ok, err
 end
