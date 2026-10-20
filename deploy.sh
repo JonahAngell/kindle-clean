@@ -12,5 +12,6 @@ luajit tests/run.lua
 mkdir -p "$DEST"
 rm -f "$DEST"/._*
 COPYFILE_DISABLE=1 cp -X profanitymask.koplugin/*.lua "$DEST/"
+dot_clean -m "$DEST" 2>/dev/null || true
 echo "Installed to $DEST"
 echo "Eject the Kindle, then restart KOReader (menu > Exit > Restart KOReader)."
