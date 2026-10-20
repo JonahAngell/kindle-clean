@@ -10,6 +10,7 @@ if [ ! -d "$KINDLE/koreader/plugins" ]; then
 fi
 luajit tests/run.lua
 mkdir -p "$DEST"
-cp profanitymask.koplugin/*.lua "$DEST/"
+rm -f "$DEST"/._*
+COPYFILE_DISABLE=1 cp -X profanitymask.koplugin/*.lua "$DEST/"
 echo "Installed to $DEST"
 echo "Eject the Kindle, then restart KOReader (menu > Exit > Restart KOReader)."
